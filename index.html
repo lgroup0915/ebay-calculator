@@ -1,12 +1,876 @@
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#17151d"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="manifest" href="manifest.json"><link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/icon-192.png"><title>eBay 円⇄ドル電卓</title><style>
-:root{color-scheme:dark;--bg:#101015;--panel:#1b1921;--panel2:#25232d;--text:#f6f3fa;--muted:#a7a3af;--line:#393642;--accent:#ff9f32;--accent2:#ffd8f2}*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif}body{min-height:100svh}.app{max-width:520px;margin:auto;padding:12px 12px calc(18px + env(safe-area-inset-bottom));min-height:100svh;display:flex;flex-direction:column}.top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 2px 10px}.brand{font-weight:800;font-size:17px}.sub{font-size:11px;color:var(--muted)}button{font:inherit;color:inherit}.iconbtn{width:44px;height:44px;border:1px solid var(--line);border-radius:14px;background:var(--panel);font-size:20px}.display{background:var(--panel);border:1px solid var(--line);border-radius:22px;overflow:hidden}.money{padding:15px 18px;min-height:126px;border-bottom:1px solid var(--line);cursor:pointer}.money:last-child{border-bottom:0}.money.active{background:linear-gradient(90deg,rgba(255,159,50,.09),transparent)}.row{display:flex;align-items:center;justify-content:space-between;gap:12px}.label{font-size:13px;color:var(--muted);font-weight:700}.amount{font-size:42px;line-height:1.05;font-weight:750;text-align:right;overflow-wrap:anywhere;letter-spacing:-1px}.expr{height:20px;color:var(--muted);font-size:14px;text-align:right;margin-bottom:3px;overflow:hidden}.ratebar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 4px 8px;color:var(--muted);font-size:12px}.status{white-space:nowrap}.keypad{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.key{min-height:64px;border:1px solid var(--line);border-radius:16px;background:var(--panel2);font-size:22px;font-weight:650}.key:active{transform:scale(.98)}.op{background:#302e39}.eq{background:var(--accent2);color:#2a1724}.danger{background:#3a3437}.history{margin-top:12px;border:1px solid var(--line);border-radius:18px;background:var(--panel);overflow:hidden}.history-head{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);font-weight:750}.history-head button{border:0;background:none;color:var(--muted);font-size:12px}.history-list{max-height:280px;overflow:auto}.hist{padding:11px 14px;border-bottom:1px solid var(--line)}.hist:last-child{border-bottom:0}.hist .f{font-size:14px;color:var(--muted)}.hist .r{font-size:18px;font-weight:750;margin-top:3px}.empty{padding:18px;text-align:center;color:var(--muted);font-size:13px}.footer{text-align:center;color:var(--muted);font-size:11px;padding:10px 0}.hidden{display:none}@media(max-width:370px){.amount{font-size:35px}.key{min-height:58px}.money{min-height:116px}}
-</style></head><body><main class="app"><div class="top"><div><div class="brand">eBay 円⇄ドル電卓</div><div class="sub">普通の電卓＋リアルタイム換算</div></div><button class="iconbtn" id="histBtn" aria-label="計算履歴">🕘</button></div><section class="display"><div class="money active" id="jpyBox"><div class="row"><span class="label">🇯🇵 JPY　円</span><span class="label">入力中</span></div><div class="expr" id="jpyExpr"></div><div class="amount" id="jpyAmt">0</div></div><div class="money" id="usdBox"><div class="row"><span class="label">🇺🇸 USD　ドル</span><span class="label">換算</span></div><div class="expr" id="usdExpr"></div><div class="amount" id="usdAmt">0.00</div></div></section><div class="ratebar"><span id="rateText">1 USD = ¥---.--</span><span class="status" id="status">為替取得中…</span></div><section class="keypad"><button class="key op" data-k="clear">C</button><button class="key op" data-k="back">←</button><button class="key op" data-k="swap">⇅</button><button class="key op" data-k="/">÷</button><button class="key" data-k="7">7</button><button class="key" data-k="8">8</button><button class="key" data-k="9">9</button><button class="key op" data-k="*">×</button><button class="key" data-k="4">4</button><button class="key" data-k="5">5</button><button class="key" data-k="6">6</button><button class="key op" data-k="-">−</button><button class="key" data-k="1">1</button><button class="key" data-k="2">2</button><button class="key" data-k="3">3</button><button class="key op" data-k="+">＋</button><button class="key op" data-k="%">%</button><button class="key" data-k="0">0</button><button class="key" data-k=".">.</button><button class="key eq" data-k="=">=</button></section><section class="history hidden" id="history"><div class="history-head"><span>計算履歴</span><button id="clearHist">履歴を消去</button></div><div class="history-list" id="historyList"></div></section><div class="footer">為替は自動更新。取得できない場合は最後のレートを使用します。</div></main><script>
-(()=>{const $=s=>document.querySelector(s), keys=[...document.querySelectorAll('[data-k]')];let rate=Number(localStorage.getItem('ebay_fx_rate'))||156.75;let active='JPY',expr='',current='0',justSolved=false,history=JSON.parse(localStorage.getItem('ebay_calc_history')||'[]');
-function fmtJPY(n){return Math.round(n||0).toLocaleString('ja-JP')}function fmtUSD(n){return (n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}function save(){localStorage.setItem('ebay_fx_rate',rate);localStorage.setItem('ebay_calc_history',JSON.stringify(history))}function render(){let n=Number(current)||0;$('#jpyAmt').textContent=fmtJPY(active==='JPY'?n:n*rate);$('#usdAmt').textContent=fmtUSD(active==='USD'?n:n/rate);$('#jpyExpr').textContent=active==='JPY'?expr:'';$('#usdExpr').textContent=active==='USD'?expr:'';$('#jpyBox').classList.toggle('active',active==='JPY');$('#usdBox').classList.toggle('active',active==='USD');$('#rateText').textContent=`1 USD = ¥${rate.toFixed(2)}`;}
-function tokenize(s){let out=[],m=s.match(/\d*\.?\d+|[+\-*/]/g)||[];return m}function calcSeq(s){let t=tokenize(s);if(!t.length)return 0;let total=Number(t[0]);for(let i=1;i<t.length;i+=2){let op=t[i],b=Number(t[i+1]);if(!Number.isFinite(b))break;if(op==='+')total+=b;else if(op==='-')total-=b;else if(op==='*')total*=b;else if(op==='/')total=b===0?0:total/b}return Number.isFinite(total)?total:0}
-function addHistory(f,r){history.unshift({f,r,c:active,ts:Date.now()});history=history.slice(0,50);save();renderHistory()}function renderHistory(){let box=$('#historyList');if(!history.length){box.innerHTML='<div class="empty">まだ計算履歴はありません</div>';return}box.innerHTML=history.map((h,i)=>`<div class="hist" data-i="${i}"><div class="f">${escapeHtml(h.f)} =</div><div class="r">${h.c==='JPY'?'¥'+fmtJPY(h.r):'$'+fmtUSD(h.r)}</div></div>`).join('')}function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function press(k){if(k==='clear'){expr='';current='0';justSolved=false;render();return}if(k==='swap'){active=active==='JPY'?'USD':'JPY';render();return}if(k==='back'){if(justSolved){expr='';current='0';justSolved=false}else{expr=expr.slice(0,-1);current=/\d*\.?\d*$/.exec(expr)?.[0]||'0'}render();return}if(k==='='){if(expr&&/[0-9.]$/.test(expr)){let r=calcSeq(expr);addHistory(expr,r);current=String(r);expr='';justSolved=true;render()}return}if(/[+\-*/]/.test(k)){if(justSolved){expr=current+ k;justSolved=false}else{if(/[+\-*/]$/.test(expr))expr=expr.slice(0,-1);expr+=k}current='0';render();return}if(k==='%'){if(current!=='0'){current=String(Number(current)/100);expr=expr.replace(/\d*\.?\d*$/,'')+current}render();return}if(/[0-9.]/.test(k)){if(justSolved){expr='';current='0';justSolved=false}if(k==='.'&&current.includes('.'))return;if(current==='0'&&k!=='.')current='';current+=k;expr+=k;render()}}
-keys.forEach(b=>b.addEventListener('click',()=>press(b.dataset.k)));$('#jpyBox').onclick=()=>{active='JPY';render()};$('#usdBox').onclick=()=>{active='USD';render()};$('#histBtn').onclick=()=>{$('#history').classList.toggle('hidden');renderHistory()};$('#clearHist').onclick=()=>{history=[];save();renderHistory()};$('#historyList').onclick=e=>{let x=e.target.closest('.hist');if(!x)return;let h=history[+x.dataset.i];active=h.c;current=String(h.r);expr='';justSolved=true;render()};window.addEventListener('keydown',e=>{let map={Enter:'=',Backspace:'back',Escape:'clear'};let k=map[e.key]||e.key;if(/^[0-9.+\-*/%]$/.test(k)||map[e.key]){e.preventDefault();press(k)}});
-async function fx(){try{let r=await fetch('https://api.frankfurter.app/latest?from=USD&to=JPY',{cache:'no-store'});if(!r.ok)throw Error();let d=await r.json();if(d?.rates?.JPY){rate=Number(d.rates.JPY);save();$('#status').textContent='自動更新済み';render()}}catch(e){$('#status').textContent='前回レートを使用'}}render();renderHistory();fx();setInterval(fx,6*60*60*1000);})();
-</script><script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js").catch(()=>{})}</script></body></html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#17151d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
+
+<title>eBay 円⇄ドル電卓</title>
+
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#101015;
+  --panel:#1b1921;
+  --panel2:#25232d;
+  --text:#f6f3fa;
+  --muted:#a7a3af;
+  --line:#393642;
+  --accent:#ff9f32;
+  --accent2:#ffd8f2
+}
+
+*{box-sizing:border-box}
+
+html,body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif
+}
+
+body{min-height:100svh}
+
+.app{
+  max-width:520px;
+  margin:auto;
+  padding:12px 12px calc(18px + env(safe-area-inset-bottom));
+  min-height:100svh;
+  display:flex;
+  flex-direction:column
+}
+
+.top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:4px 2px 10px
+}
+
+.brand{font-weight:800;font-size:17px}
+.sub{font-size:11px;color:var(--muted)}
+
+button{font:inherit;color:inherit}
+
+.iconbtn{
+  width:44px;
+  height:44px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:var(--panel);
+  font-size:20px
+}
+
+.display{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:22px;
+  overflow:hidden
+}
+
+.money{
+  padding:15px 18px;
+  min-height:126px;
+  border-bottom:1px solid var(--line);
+  cursor:pointer
+}
+
+.money:last-child{border-bottom:0}
+
+.money.active{
+  background:linear-gradient(90deg,rgba(255,159,50,.09),transparent)
+}
+
+.row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px
+}
+
+.label{
+  font-size:13px;
+  color:var(--muted);
+  font-weight:700
+}
+
+.amount{
+  font-size:42px;
+  line-height:1.05;
+  font-weight:750;
+  text-align:right;
+  overflow-wrap:anywhere;
+  letter-spacing:-1px
+}
+
+.expr{
+  height:20px;
+  color:var(--muted);
+  font-size:14px;
+  text-align:right;
+  margin-bottom:3px;
+  overflow:hidden
+}
+
+.ratebar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:10px 4px 8px;
+  color:var(--muted);
+  font-size:12px
+}
+
+.status{white-space:nowrap}
+
+.keypad{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:7px
+}
+
+.key{
+  min-height:64px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:var(--panel2);
+  font-size:22px;
+  font-weight:650
+}
+
+.key:active{transform:scale(.98)}
+
+.op{background:#302e39}
+
+.eq{
+  background:var(--accent2);
+  color:#2a1724
+}
+
+.danger{background:#3a3437}
+
+.history{
+  margin-top:12px;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:var(--panel);
+  overflow:hidden
+}
+
+.history-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:12px 14px;
+  border-bottom:1px solid var(--line);
+  font-weight:750
+}
+
+.history-head button{
+  border:0;
+  background:none;
+  color:var(--muted);
+  font-size:12px
+}
+
+.history-list{
+  max-height:280px;
+  overflow:auto
+}
+
+.hist{
+  padding:11px 14px;
+  border-bottom:1px solid var(--line)
+}
+
+.hist:last-child{border-bottom:0}
+
+.hist .f{
+  font-size:14px;
+  color:var(--muted)
+}
+
+.hist .r{
+  font-size:18px;
+  font-weight:750;
+  margin-top:3px
+}
+
+.empty{
+  padding:18px;
+  text-align:center;
+  color:var(--muted);
+  font-size:13px
+}
+
+.footer{
+  text-align:center;
+  color:var(--muted);
+  font-size:11px;
+  padding:10px 0
+}
+
+.hidden{display:none}
+
+@media(max-width:370px){
+  .amount{font-size:35px}
+  .key{min-height:58px}
+  .money{min-height:116px}
+}
+</style>
+</head>
+
+<body>
+
+<main class="app">
+
+<div class="top">
+  <div>
+    <div class="brand">eBay 円⇄ドル電卓</div>
+    <div class="sub">普通の電卓＋自動為替換算</div>
+  </div>
+  <button class="iconbtn" id="histBtn" aria-label="計算履歴">🕘</button>
+</div>
+
+<section class="display">
+
+  <div class="money active" id="jpyBox">
+    <div class="row">
+      <span class="label">🇯🇵 JPY　円</span>
+      <span class="label">入力中</span>
+    </div>
+    <div class="expr" id="jpyExpr"></div>
+    <div class="amount" id="jpyAmt">0</div>
+  </div>
+
+  <div class="money" id="usdBox">
+    <div class="row">
+      <span class="label">🇺🇸 USD　ドル</span>
+      <span class="label">換算</span>
+    </div>
+    <div class="expr" id="usdExpr"></div>
+    <div class="amount" id="usdAmt">0.00</div>
+  </div>
+
+</section>
+
+<div class="ratebar">
+  <span id="rateText">1 USD = ¥---.--</span>
+  <span class="status" id="status">為替取得中…</span>
+</div>
+
+<section class="keypad">
+
+<button class="key op" data-k="clear">C</button>
+<button class="key op" data-k="back">←</button>
+<button class="key op" data-k="swap">⇅</button>
+<button class="key op" data-k="/">÷</button>
+
+<button class="key" data-k="7">7</button>
+<button class="key" data-k="8">8</button>
+<button class="key" data-k="9">9</button>
+<button class="key op" data-k="*">×</button>
+
+<button class="key" data-k="4">4</button>
+<button class="key" data-k="5">5</button>
+<button class="key" data-k="6">6</button>
+<button class="key op" data-k="-">−</button>
+
+<button class="key" data-k="1">1</button>
+<button class="key" data-k="2">2</button>
+<button class="key" data-k="3">3</button>
+<button class="key op" data-k="+">＋</button>
+
+<button class="key op" data-k="%">%</button>
+<button class="key" data-k="0">0</button>
+<button class="key" data-k=".">.</button>
+<button class="key eq" data-k="=">=</button>
+
+</section>
+
+<section class="history hidden" id="history">
+
+  <div class="history-head">
+    <span>計算履歴</span>
+    <button id="clearHist">履歴を消去</button>
+  </div>
+
+  <div class="history-list" id="historyList"></div>
+
+</section>
+
+<div class="footer">
+為替は自動更新。取得できない場合は最後に取得したレートを使用します。
+</div>
+
+</main>
+
+<script>
+(()=>{
+
+const $=s=>document.querySelector(s);
+
+const keys=[
+  ...document.querySelectorAll('[data-k]')
+];
+
+let rate=
+  Number(localStorage.getItem('ebay_fx_rate')) || 156.75;
+
+let active='JPY';
+let expr='';
+let current='0';
+let justSolved=false;
+
+let history=
+  JSON.parse(
+    localStorage.getItem('ebay_calc_history') || '[]'
+  );
+
+
+function fmtJPY(n){
+  return Math.round(n||0).toLocaleString('ja-JP');
+}
+
+
+function fmtUSD(n){
+  return (n||0).toLocaleString(
+    'en-US',
+    {
+      minimumFractionDigits:2,
+      maximumFractionDigits:2
+    }
+  );
+}
+
+
+function save(){
+
+  localStorage.setItem(
+    'ebay_fx_rate',
+    rate
+  );
+
+  localStorage.setItem(
+    'ebay_calc_history',
+    JSON.stringify(history)
+  );
+
+}
+
+
+function render(){
+
+  let n=Number(current)||0;
+
+  $('#jpyAmt').textContent=
+    fmtJPY(
+      active==='JPY'
+        ? n
+        : n*rate
+    );
+
+  $('#usdAmt').textContent=
+    fmtUSD(
+      active==='USD'
+        ? n
+        : n/rate
+    );
+
+  $('#jpyExpr').textContent=
+    active==='JPY'
+      ? expr
+      : '';
+
+  $('#usdExpr').textContent=
+    active==='USD'
+      ? expr
+      : '';
+
+  $('#jpyBox')
+    .classList
+    .toggle(
+      'active',
+      active==='JPY'
+    );
+
+  $('#usdBox')
+    .classList
+    .toggle(
+      'active',
+      active==='USD'
+    );
+
+  $('#rateText').textContent=
+    `1 USD = ¥${rate.toFixed(2)}`;
+
+}
+
+
+function tokenize(s){
+
+  return s.match(
+    /\d*\.?\d+|[+\-*/]/g
+  ) || [];
+
+}
+
+
+function calcSeq(s){
+
+  let t=tokenize(s);
+
+  if(!t.length) return 0;
+
+  let total=Number(t[0]);
+
+  for(
+    let i=1;
+    i<t.length;
+    i+=2
+  ){
+
+    let op=t[i];
+
+    let b=Number(t[i+1]);
+
+    if(!Number.isFinite(b)) break;
+
+    if(op==='+')
+      total+=b;
+
+    else if(op==='-')
+      total-=b;
+
+    else if(op==='*')
+      total*=b;
+
+    else if(op==='/')
+      total=
+        b===0
+          ? 0
+          : total/b;
+
+  }
+
+  return Number.isFinite(total)
+    ? total
+    : 0;
+
+}
+
+
+function addHistory(f,r){
+
+  history.unshift({
+    f,
+    r,
+    c:active,
+    ts:Date.now()
+  });
+
+  history=
+    history.slice(0,50);
+
+  save();
+
+  renderHistory();
+
+}
+
+
+function renderHistory(){
+
+  let box=$('#historyList');
+
+  if(!history.length){
+
+    box.innerHTML=
+      '<div class="empty">まだ計算履歴はありません</div>';
+
+    return;
+
+  }
+
+  box.innerHTML=
+    history.map(
+      (h,i)=>
+        `<div class="hist" data-i="${i}">
+          <div class="f">${escapeHtml(h.f)} =</div>
+          <div class="r">
+            ${
+              h.c==='JPY'
+                ? '¥'+fmtJPY(h.r)
+                : '$'+fmtUSD(h.r)
+            }
+          </div>
+        </div>`
+    ).join('');
+
+}
+
+
+function escapeHtml(s){
+
+  return s.replace(
+    /[&<>"']/g,
+    c=>({
+      '&':'&amp;',
+      '<':'&lt;',
+      '>':'&gt;',
+      '"':'&quot;',
+      "'":'&#39;'
+    }[c])
+  );
+
+}
+
+
+function press(k){
+
+  if(k==='clear'){
+
+    expr='';
+    current='0';
+    justSolved=false;
+
+    render();
+
+    return;
+  }
+
+
+  if(k==='swap'){
+
+    active=
+      active==='JPY'
+        ? 'USD'
+        : 'JPY';
+
+    render();
+
+    return;
+  }
+
+
+  if(k==='back'){
+
+    if(justSolved){
+
+      expr='';
+      current='0';
+      justSolved=false;
+
+    }else{
+
+      expr=expr.slice(0,-1);
+
+      current=
+        /\d*\.?\d*$/.exec(expr)?.[0]
+        || '0';
+
+    }
+
+    render();
+
+    return;
+  }
+
+
+  if(k==='='){
+
+    if(
+      expr &&
+      /[0-9.]$/.test(expr)
+    ){
+
+      let r=calcSeq(expr);
+
+      addHistory(expr,r);
+
+      current=String(r);
+
+      expr='';
+
+      justSolved=true;
+
+      render();
+
+    }
+
+    return;
+  }
+
+
+  if(/[+\-*/]/.test(k)){
+
+    if(justSolved){
+
+      expr=current+k;
+
+      justSolved=false;
+
+    }else{
+
+      if(/[+\-*/]$/.test(expr))
+        expr=expr.slice(0,-1);
+
+      expr+=k;
+
+    }
+
+    current='0';
+
+    render();
+
+    return;
+  }
+
+
+  if(k==='%'){
+
+    if(current!=='0'){
+
+      current=
+        String(
+          Number(current)/100
+        );
+
+      expr=
+        expr.replace(
+          /\d*\.?\d*$/,
+          ''
+        )+current;
+
+    }
+
+    render();
+
+    return;
+  }
+
+
+  if(/[0-9.]/.test(k)){
+
+    if(justSolved){
+
+      expr='';
+      current='0';
+      justSolved=false;
+
+    }
+
+    if(
+      k==='.' &&
+      current.includes('.')
+    )
+      return;
+
+    if(
+      current==='0' &&
+      k!=='.'
+    )
+      current='';
+
+    current+=k;
+    expr+=k;
+
+    render();
+
+  }
+
+}
+
+
+keys.forEach(
+  b=>
+    b.addEventListener(
+      'click',
+      ()=>press(b.dataset.k)
+    )
+);
+
+
+$('#jpyBox').onclick=()=>{
+
+  active='JPY';
+  render();
+
+};
+
+
+$('#usdBox').onclick=()=>{
+
+  active='USD';
+  render();
+
+};
+
+
+$('#histBtn').onclick=()=>{
+
+  $('#history')
+    .classList
+    .toggle('hidden');
+
+  renderHistory();
+
+};
+
+
+$('#clearHist').onclick=()=>{
+
+  history=[];
+
+  save();
+
+  renderHistory();
+
+};
+
+
+$('#historyList').onclick=e=>{
+
+  let x=
+    e.target.closest('.hist');
+
+  if(!x) return;
+
+  let h=
+    history[+x.dataset.i];
+
+  active=h.c;
+  current=String(h.r);
+  expr='';
+  justSolved=true;
+
+  render();
+
+};
+
+
+window.addEventListener(
+  'keydown',
+  e=>{
+
+    let map={
+      Enter:'=',
+      Backspace:'back',
+      Escape:'clear'
+    };
+
+    let k=
+      map[e.key] || e.key;
+
+    if(
+      /^[0-9.+\-*/%]$/.test(k)
+      || map[e.key]
+    ){
+
+      e.preventDefault();
+
+      press(k);
+
+    }
+
+  }
+);
+
+
+/* =========================
+   為替自動取得
+   ========================= */
+
+async function fx(){
+
+  $('#status').textContent=
+    '為替取得中…';
+
+  try{
+
+    const r=
+      await fetch(
+        'https://api.frankfurter.dev/v2/rate/usd/jpy',
+        {
+          cache:'no-store'
+        }
+      );
+
+    if(!r.ok)
+      throw new Error(
+        'FX API error'
+      );
+
+    const d=
+      await r.json();
+
+    if(
+      d &&
+      Number.isFinite(
+        Number(d.rate)
+      )
+    ){
+
+      rate=
+        Number(d.rate);
+
+      save();
+
+      $('#status').textContent=
+        '自動更新済み';
+
+      render();
+
+      return;
+
+    }
+
+    throw new Error(
+      'Invalid FX response'
+    );
+
+  }catch(e){
+
+    $('#status').textContent=
+      '前回レートを使用';
+
+    render();
+
+  }
+
+}
+
+
+render();
+renderHistory();
+fx();
+
+/* 6時間ごとに自動更新 */
+setInterval(
+  fx,
+  6*60*60*1000
+);
+
+})();
+</script>
+
+<script>
+if("serviceWorker" in navigator){
+
+  navigator.serviceWorker
+    .register("sw.js")
+    .catch(()=>{});
+
+}
+</script>
+
+</body>
+</html>
